@@ -12,7 +12,7 @@
 // clang-format on
 
 namespace {
-constexpr const char *kHttpsBindAddress = "http://0.0.0.0:443";
+constexpr const char *kHttpsBindAddress = "https://0.0.0.0:443";
 
 constexpr const char *kRootDir = "/home/weed/sharex-server";
 constexpr const char *kUploadDir = "/home/weed/sharex-server/i";
