@@ -8,6 +8,7 @@
 #include <string_view>
 #include <vector>
 #include <cassert>
+#include <unordered_map>
 // clang-format on
 
 namespace {
@@ -33,7 +34,6 @@ enum http_status {
 struct server_context {
   bool use_tls = false;
   ::mg_http_serve_opts opts{};
-  std::vector<std::future<int>> io_futures_{};
 };
 
 struct mg_str_wrapper {
@@ -46,12 +46,16 @@ struct mg_str_wrapper {
   ::mg_str str_{};
 };
 
+struct connection_state {
+  std::future<http_status> future{};
+};
+
 void create_mg_context(server_context *ctx, bool use_tls = false) {
   ctx->use_tls = use_tls;
   ctx->opts = ::mg_http_serve_opts{.root_dir = kRootDir};
 }
 
-int handle_file_upload(std::unique_ptr<::mg_str_wrapper> body) {
+http_status handle_file_upload(std::unique_ptr<::mg_str_wrapper> body) {
   ::mg_http_part part{};
   size_t pos = 0;
   while ((pos = ::mg_http_next_multipart(body->str_, pos, &part)) != 0) {
@@ -103,22 +107,25 @@ void event_handler(::mg_connection *c, int ev, void *ev_data, void *fn_data) {
         return;
       }
 
-      auto body = std::make_unique<mg_str_wrapper>(::mg_strdup(msg->body));
-      ctx->io_futures_.push_back(
-          std::async(std::launch::async, &handle_file_upload, std::move(body)));
+      auto *state = reinterpret_cast<connection_state *>(
+          calloc(1, sizeof(connection_state)));
+
+      state->future = std::async(
+          std::launch::async, &handle_file_upload,
+          std::move(std::make_unique<mg_str_wrapper>(::mg_strdup(msg->body))));
+
+      *reinterpret_cast<void **>(c->data) = state;
 
     } else {
       ::mg_http_serve_dir(c, static_cast<::mg_http_message *>(ev_data),
                           &ctx->opts);
     }
   } else if (ev == ::MG_EV_POLL) {
-    for (auto it = ctx->io_futures_.begin(); it != ctx->io_futures_.end();) {
-      if (it->wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-        ::mg_http_reply(c, it->get(), "", "");
-        it = ctx->io_futures_.erase(it);
-      } else {
-        ++it;
-      }
+    auto *state = *reinterpret_cast<connection_state**>(c->data);
+    if (state != nullptr && state->future.wait_for(std::chrono::seconds(0)) ==
+                               std::future_status::ready) {
+      ::mg_http_reply(c, state->future.get(), "", "");
+      *reinterpret_cast<void **>(c->data) = nullptr;
     }
   }
 }
