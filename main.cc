@@ -36,15 +36,25 @@ struct server_context {
   std::vector<std::future<int>> io_futures_{};
 };
 
+struct mg_str_wrapper {
+  mg_str_wrapper(const char *ptr, size_t len) : str_{ptr, len} {}
+  mg_str_wrapper(::mg_str str) : str_(str) {}
+  ~mg_str_wrapper() {
+    free((void *)this->str_.ptr);
+    this->str_.ptr = nullptr;
+  }
+  ::mg_str str_{};
+};
+
 void create_mg_context(server_context *ctx, bool use_tls = false) {
   ctx->use_tls = use_tls;
   ctx->opts = ::mg_http_serve_opts{.root_dir = kRootDir};
 }
 
-int handle_file_upload(::mg_str body) {
+int handle_file_upload(std::unique_ptr<::mg_str_wrapper> body) {
   ::mg_http_part part{};
   size_t pos = 0;
-  while ((pos = ::mg_http_next_multipart(body, pos, &part)) != 0) {
+  while ((pos = ::mg_http_next_multipart(body->str_, pos, &part)) != 0) {
     char buf[MG_PATH_MAX]{};
     size_t length =
         ::mg_snprintf(buf, sizeof(buf), "%s/%.*s", kUploadDir,
@@ -93,9 +103,9 @@ void event_handler(::mg_connection *c, int ev, void *ev_data, void *fn_data) {
         return;
       }
 
-      const ::mg_str body = ::mg_strdup(msg->body);
+      auto body = std::make_unique<mg_str_wrapper>(::mg_strdup(msg->body));
       ctx->io_futures_.push_back(
-          std::async(std::launch::async, &handle_file_upload, body));
+          std::async(std::launch::async, &handle_file_upload, std::move(body)));
 
     } else {
       ::mg_http_serve_dir(c, static_cast<::mg_http_message *>(ev_data),
@@ -126,6 +136,7 @@ int main(void) {
   create_mg_context(&https_context, true);
 
   ::mg_http_listen(&mgr, kHttpBindAddress, event_handler, &http_context);
+
   ::mg_http_listen(&mgr, kHttpsBindAddress, event_handler, &https_context);
 
   for (;;) ::mg_mgr_poll(&mgr, 10);
