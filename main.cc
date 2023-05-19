@@ -88,9 +88,9 @@ http_status handle_file_upload(std::unique_ptr<::mg_str_wrapper> body) {
 bool is_authorized_api_request(::mg_http_message *msg,
                                std::string_view username,
                                std::string_view password) {
-  char user[64], pw[64]{};
-  ::mg_http_creds(msg, user, sizeof(user), pw, sizeof(pw));
-  return (username == user && password == pw);
+  std::string user, pass{};
+  ::mg_http_creds(msg, &user[0], user.max_size(), &pass[0], pass.max_size());
+  return (username == user && password == pass);
 }
 
 void event_handler(::mg_connection *c, int ev, void *ev_data, void *fn_data) {
