@@ -35,11 +35,6 @@ enum http_status {
   HTTP_STATUS_INTERNAL_SERVER_ERROR = 500,
 };
 
-struct server_context {
-  ::mg_http_serve_opts opts{};
-  ::mg_tls_opts tls_opts{};
-};
-
 struct mg_str_wrapper {
   mg_str_wrapper(const char *ptr, size_t len) : str_{ptr, len} {}
   mg_str_wrapper(::mg_str str) : str_(str) {}
@@ -54,8 +49,6 @@ struct mg_str_wrapper {
 struct connection_state {
   std::future<http_status> future{};
 };
-
-void create_mg_context(server_context *ctx){ctx->opts = }
 
 http_status handle_file_upload(std::unique_ptr<::mg_str_wrapper> body) {
   ::mg_http_part part{};
