@@ -76,7 +76,7 @@ http_status handle_file_upload(std::unique_ptr<::mg_str_wrapper> body) {
 }
 
 void event_handler(::mg_connection *c, int ev, void *ev_data, void *fn_data) {
-  if (ev == ::MG_EV_ACCEPT && ctx != nullptr) {
+  if (ev == ::MG_EV_ACCEPT) {
     auto tls_opts = ::mg_tls_opts{
         .cert = kCertFile,
         .certkey = kCertKeyFile,
